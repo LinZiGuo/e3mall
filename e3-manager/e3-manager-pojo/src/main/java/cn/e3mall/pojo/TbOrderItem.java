@@ -1,6 +1,8 @@
 package cn.e3mall.pojo;
 
-public class TbOrderItem {
+import java.io.Serializable;
+
+public class TbOrderItem implements Serializable {
     private String id;
 
     private String itemId;
@@ -16,6 +18,8 @@ public class TbOrderItem {
     private Long totalFee;
 
     private String picPath;
+
+    private static final long serialVersionUID = 1L;
 
     public String getId() {
         return id;
