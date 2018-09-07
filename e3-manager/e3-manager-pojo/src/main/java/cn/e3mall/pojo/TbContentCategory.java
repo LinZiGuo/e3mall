@@ -1,9 +1,8 @@
 package cn.e3mall.pojo;
 
-import java.io.Serializable;
 import java.util.Date;
 
-public class TbContentCategory implements Serializable {
+public class TbContentCategory {
     private Long id;
 
     private Long parentId;
@@ -19,8 +18,6 @@ public class TbContentCategory implements Serializable {
     private Date created;
 
     private Date updated;
-
-    private static final long serialVersionUID = 1L;
 
     public Long getId() {
         return id;

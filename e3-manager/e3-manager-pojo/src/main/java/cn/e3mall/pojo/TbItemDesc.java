@@ -1,9 +1,8 @@
 package cn.e3mall.pojo;
 
-import java.io.Serializable;
 import java.util.Date;
 
-public class TbItemDesc implements Serializable {
+public class TbItemDesc {
     private Long itemId;
 
     private Date created;
@@ -11,8 +10,6 @@ public class TbItemDesc implements Serializable {
     private Date updated;
 
     private String itemDesc;
-
-    private static final long serialVersionUID = 1L;
 
     public Long getItemId() {
         return itemId;
