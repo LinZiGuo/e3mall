@@ -1,8 +1,9 @@
 package cn.e3mall.pojo;
 
+import java.io.Serializable;
 import java.util.Date;
 
-public class TbItemParamItem {
+public class TbItemParamItem implements Serializable {
     private Long id;
 
     private Long itemId;
@@ -12,6 +13,8 @@ public class TbItemParamItem {
     private Date updated;
 
     private String paramData;
+
+    private static final long serialVersionUID = 1L;
 
     public Long getId() {
         return id;
