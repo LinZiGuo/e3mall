@@ -4,29 +4,59 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import cn.e3mall.common.jedis.JedisClient;
 import cn.e3mall.common.pojo.EasyUITreeNode;
 import cn.e3mall.common.utils.E3Result;
 import cn.e3mall.common.utils.IDUtils;
+import cn.e3mall.common.utils.JsonUtils;
 import cn.e3mall.content.service.ContentCatService;
 import cn.e3mall.mapper.TbContentCategoryMapper;
+import cn.e3mall.pojo.TbContent;
 import cn.e3mall.pojo.TbContentCategory;
 import cn.e3mall.pojo.TbContentCategoryExample;
 @Service
 public class ContentCatServiceImpl implements ContentCatService {
 	@Autowired
 	private TbContentCategoryMapper contentCategoryMapper;
+	@Autowired
+	private JedisClient jedisClient;
+	@Value("${CONTENT_LIST}")
+	private String CONTENT_LIST;
 	
 	/**
 	 * 获取内容分类列表
 	 */
 	public List<EasyUITreeNode> getContentCatList(long parentId) {
-		TbContentCategoryExample example = new TbContentCategoryExample();
-		example.createCriteria().andParentIdEqualTo(parentId);
-		List<TbContentCategory> list = contentCategoryMapper.selectByExample(example);
 		List<EasyUITreeNode> resultList = new ArrayList<>();
+		List<TbContentCategory> list = null;
+		//查询缓存
+		try {
+			//如果缓存中有直接响应结果
+			String json = jedisClient.hget(CONTENT_LIST, parentId + "");
+			if (StringUtils.isNotBlank(json)) {
+				list = JsonUtils.jsonToList(json, TbContentCategory.class);
+			} else {
+				//如果没有查询数据库
+				TbContentCategoryExample example = new TbContentCategoryExample();
+				//设置查询条件
+				example.createCriteria().andParentIdEqualTo(parentId);
+				//执行查询
+				list = contentCategoryMapper.selectByExample(example);
+				//把结果添加到缓存
+				try {
+					jedisClient.hset(CONTENT_LIST, parentId + "", JsonUtils.objectToJson(list));
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		for (TbContentCategory contentCat : list) {
 			EasyUITreeNode node = new EasyUITreeNode();
 			node.setId(contentCat.getId());
@@ -67,6 +97,8 @@ public class ContentCatServiceImpl implements ContentCatService {
 			contentCategoryMapper.updateByPrimaryKeySelective(parentNode);
 		}
 		//4.需要主键返回。
+		//缓存同步,删除缓存中对应的数据。
+		jedisClient.hdel(CONTENT_LIST, category.getParentId().toString());
 		//5.返回E3Result，其中包装TbContentCategory对象
 		return E3Result.ok(category);
 	}
@@ -80,6 +112,8 @@ public class ContentCatServiceImpl implements ContentCatService {
 		category.setUpdated(date);
 		category.setName(name);
 		contentCategoryMapper.updateByPrimaryKey(category);
+		//缓存同步,删除缓存中对应的数据。
+		jedisClient.hdel(CONTENT_LIST, category.getParentId().toString());
 		return E3Result.ok(category);
 	}
 
@@ -98,6 +132,8 @@ public class ContentCatServiceImpl implements ContentCatService {
 		} else {
 			//若被删节点无子节点，则允许删除
 			contentCategoryMapper.deleteByPrimaryKey(id);
+			//缓存同步,删除缓存中对应的数据。
+			jedisClient.hdel(CONTENT_LIST, category.getParentId().toString());
 			//查询与被删节点同一父节点的全部信息
 			TbContentCategoryExample example = new TbContentCategoryExample();
 			example.createCriteria().andParentIdEqualTo(parentid);
@@ -109,6 +145,8 @@ public class ContentCatServiceImpl implements ContentCatService {
 					//判断父节点的isParent属性是否为false如果不是就修改为false
 					parent.setIsParent(false);
 					contentCategoryMapper.updateByPrimaryKey(parent);
+					//缓存同步,删除缓存中对应的数据。
+					jedisClient.hdel(CONTENT_LIST, parent.getParentId().toString());
 				}
 			}
 		}
