@@ -3,9 +3,19 @@ package cn.e3mall.service.impl;
 import java.util.Date;
 import java.util.List;
 
+import javax.annotation.Resource;
+import javax.jms.Destination;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.Session;
+import javax.jms.TextMessage;
+import javax.jms.Topic;
+
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jms.core.JmsTemplate;
+import org.springframework.jms.core.MessageCreator;
 import org.springframework.stereotype.Service;
 
 import com.github.pagehelper.PageHelper;
@@ -43,6 +53,10 @@ public class ItemServiceImpl implements ItemService {
 	private TbItemParamItemMapper itemParamItemMapper;
 	@Autowired
 	private JedisClient jedisClient;
+	@Autowired
+	private JmsTemplate jmsTemplate;
+	@Resource
+	private Destination topicDestination;
 	@Value("${REDIS_ITEM_PRE}")
 	private String REDIS_ITEM_PRE;
 	@Value("${ITEM_CACHE_EXPIRE}")
@@ -110,7 +124,7 @@ public class ItemServiceImpl implements ItemService {
 	 */
 	public E3Result addItem(TbItem item, String desc) {
 		//1 生成商品id
-		long itemid = IDUtils.genItemId();
+		final long itemid = IDUtils.genItemId();
 		//2 补全TbItem对象的属性
 		item.setId(itemid);
 		//商品状态，1-正常，2-下架，3-删除
@@ -131,6 +145,15 @@ public class ItemServiceImpl implements ItemService {
 		itemDescMapper.insert(itemDesc);
 		//缓存同步,删除缓存中对应的数据。
 		jedisClient.del(REDIS_ITEM_PRE + ":" + itemid + ":BASE");
+		//发送商品添加消息
+		jmsTemplate.send(topicDestination, new MessageCreator() {
+			
+			@Override
+			public Message createMessage(Session session) throws JMSException {
+				TextMessage textMessage = session.createTextMessage(itemid + "");
+				return textMessage;
+			}
+		});
 		//7 返回成功，E3Result.ok()
 		return E3Result.ok();
 	}
@@ -139,30 +162,9 @@ public class ItemServiceImpl implements ItemService {
 	 * 根据ID查询商品描述
 	 */
 	public E3Result getItemDescById(long itemId) {
-		// 查询缓存
-		try {
-			String json = jedisClient.get(REDIS_ITEM_PRE + ":" + itemId + ":DESC");
-			if (StringUtils.isNotBlank(json)) {
-				TbItemDesc tbItemDesc = JsonUtils.jsonToPojo(json, TbItemDesc.class);
-				return E3Result.ok(tbItemDesc);
-			} else {
-				TbItemDescExample example = new TbItemDescExample();
-				example.createCriteria().andItemIdEqualTo(itemId);
-				List<TbItemDesc> list = itemDescMapper.selectByExampleWithBLOBs(example);
-				if (list != null && list.size() > 0) {
-					// 把结果添加到缓存
-					try {
-						jedisClient.set(REDIS_ITEM_PRE + ":" + itemId + ":DESC", JsonUtils.objectToJson(list.get(0)));
-						// 设置过期时间
-						jedisClient.expire(REDIS_ITEM_PRE + ":" + itemId + ":DESC", ITEM_CACHE_EXPIRE);
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-					return E3Result.ok(list.get(0));
-				}
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
+		TbItemDesc desc = getItemDesc(itemId);
+		if (desc != null) {
+			return E3Result.ok(desc);
 		}
 		return null;
 	}
@@ -228,6 +230,36 @@ public class ItemServiceImpl implements ItemService {
 			jedisClient.del(REDIS_ITEM_PRE + ":" + id + ":BASE");
 		}
 		return E3Result.ok();
+	}
+
+	@Override
+	public TbItemDesc getItemDesc(long itemId) {
+		// 查询缓存
+		try {
+			String json = jedisClient.get(REDIS_ITEM_PRE + ":" + itemId + ":DESC");
+			if (StringUtils.isNotBlank(json)) {
+				TbItemDesc tbItemDesc = JsonUtils.jsonToPojo(json, TbItemDesc.class);
+				return tbItemDesc;
+			} else {
+				TbItemDescExample example = new TbItemDescExample();
+				example.createCriteria().andItemIdEqualTo(itemId);
+				List<TbItemDesc> list = itemDescMapper.selectByExampleWithBLOBs(example);
+				if (list != null && list.size() > 0) {
+					// 把结果添加到缓存
+					try {
+						jedisClient.set(REDIS_ITEM_PRE + ":" + itemId + ":DESC", JsonUtils.objectToJson(list.get(0)));
+						// 设置过期时间
+						jedisClient.expire(REDIS_ITEM_PRE + ":" + itemId + ":DESC", ITEM_CACHE_EXPIRE);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+					return list.get(0);
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 }
