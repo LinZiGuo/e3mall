@@ -8,5 +8,5 @@ public interface ItemMapper {
 
 	List<SearchItem> getItemList();
 	
-	SearchItem getItemByItem(long itemId);
+	SearchItem getItemById(long itemId);
 }
