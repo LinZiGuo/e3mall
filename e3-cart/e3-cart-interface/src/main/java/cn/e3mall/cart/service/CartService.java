@@ -17,4 +17,6 @@ public interface CartService {
 
 	E3Result deleteCartItem(Long id, Long itemId);
 
+	E3Result clearCartItem(Long id);
+
 }
